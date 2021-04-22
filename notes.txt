@@ -1,0 +1,186 @@
+Gameloop: https://journal.stuffwithstuff.com/2014/07/15/a-turn-based-game-loop/
+
+ECS system. Everything is an entity, (including tiles?) 
+
+eg:
+{
+    entityType: EntityType.Goblin,
+    entityId: 3052,
+    components: 
+        [
+            { 
+                type: ComponentType.Name,
+                id: 5932,
+                name: "Grugrath the Goblin" 
+            },
+
+            {
+                type: ComponentType.Attributes,
+                id: 3968,
+                strength: 12,
+                dexterity: 8,
+                intelligence: 5
+            },
+
+            {
+                type: ComponentType.Position,
+                id: 8285,
+                x: 7,
+                y: 15
+            }
+        ]
+}
+
+When a client connects, only the parts of the map / entities it can see with all it's characters are sent to the client.
+As the game progresses, local updates are send back to the client using events (but only for entities the player can currently see.
+ This will involve keeping track of each players' fov)
+
+ eg: 
+ {
+     eventType: EventType.Move,
+     takenByEntity: 5902,
+
+     updatedComponents:
+     [
+         {
+             type: ComponentType.ActionPoints,
+             id: 391,
+             value: 4
+
+         },
+         {
+             type: ComponentType.Position,
+             id: 5892,
+             x: 4,
+             y: 2
+         }
+     ]
+ }
+
+ {
+     eventType: EventType.EntityDamaged,
+     
+     causedByEntity: 7195,
+     damagedEntity: 8487,
+
+     updatedComponents: 
+     [
+         { 
+            type: ComponentType.Health,
+            id: 8482,
+            health: 7
+        }
+     ]
+ }
+
+ global events will be sent to all players for events that all players should be aware of (players connecting / disconnecting / game starting / ending etc)
+
+
+entities should be stored both spatially and sequentially.
+
+The map structure will hold pointers to entities in each cell. This will be useful for checking if move actions are possible, 
+as well as working out which entities are visible by each player for the FOV calculations.
+
+Entities should also be stored in a list so they can be enumerated through easily. Useful for working out the turn order.
+
+Entity templates can be stored in json files with special syntax for generating values for components.
+
+{
+    {
+        entityType: EntityType.Goblin,
+        components: 
+            [
+                {
+                    type: ComponentType.Name,
+                    name: generateWith(GoblinNameGenerator)
+                },
+                {
+                    type: ComponentType.Health,
+                    health: random(min: 10, max: 20)
+                },
+                {
+                    type: ComponentType.Attributes,
+                    strength: dice(2d6),
+                    dexterity: dice(2d8),
+                    intelligence: dice(3d4)
+                }
+            ]
+    }
+}
+
+In the code, an EntityCreator factory can be used to create entities: 
+
+    EntityCreator.Create(EntityType.Goblin)
+
+
+Multirogue.Common is essentially the contract between the client and server. 
+Stuff like EntityType enum, entity / components / events / message interfaces needs to go in here.
+
+The intention is to start with a sadconsole client, but the server side code should make no assumptions on the client used. Eventually we should be able to create
+a graphical tilebased client or a browser based client.
+
+Use Websockets for the network connection. The additional latency compared to raw tcp should be minimal, and irrelevant for a turn based game such as this.
+Websockets should allow us to create a browser based client without any issue.
+
+The server shouldn't care which network protocols or clients are being used. The websocket code should be abstracted away so that we could in theory add another protocol in, such as raw tcp, 
+or gRPC. We should allow multiple network protocols to be used in a game simultaneously, so one client could be using websockets from a browser, another using websockets 
+from a sadconsole client, another using a different client using a raw TCP connection if we do eventually implement that.
+
+
+Resillience: Should we store game state in some sort of database as each turn happens? 
+Then if the server dies, we can start it up again and it can resume where it left off.
+Perhaps just a file is best for this.
+
+player characters / items need to be stored in a database, when connecting to a game they will specify which characters they are using.
+When the game completes, this database needs to be updated with updates to the characters / inventory etc
+
+Multirogue.Server is only concerned with running the actual game. Handling the managing of these characters outside the game can be done elsewhere.
+Multirogue.Server instances will be created / destroyed as games start and end.
+
+Probably need a new service for managing characters / inventory, buying / selling items between games etc.
+
+Action point system for moving is probably best for multiplayer. 
+
+Use action classes as used in the game loop link above. Move action takes 1 AP, Attack action takes x action points etc.
+
+Do entities have event handlers? eg. OnTurn, OnEndTurn, OnAction. 
+Entity.OnTurn can then loop through it's own components and invoke their onTurn handler, so components can do stuff at the end of a turn.
+Eg. A poisoned component can apply poison damage at the end of a turn.
+
+How do we handle the damage model?
+Health points + Body part damage. organ damage?
+Armour should protect different body parts a different amount. 
+
+Can you target specfic body parts during an attack?
+
+Creatures should be able to have different body parts. Eg. a spider has 8 legs.
+An ettin has 2 heads and 2 necks, so should be able to wear 2 helmets / necklaces.
+
+Body parts should accept different item types. a human foot can equip medium size boots, but a spider foot can't equip boots.
+
+Inventory system. Interesting idea on reddit. Go find it.
+
+Loot system. Possible to get even highest level loot from lowest level enemies (just with very low probability)
+
+
+To consider:
+
+How to implement:
+
+ A poison cloud on the map which expands every turn and delivers poison damage to any entities in the cloud.
+
+ An item which prevents poison damage when equiped.
+
+ A paralysed state which requires a strength check on move, to break the paralysis. Otherwise the move fails but consumes action points.
+
+ An amulet of luck which has 3 charges and allows the player to redo the last action.
+
+
+Do we need an internal event system where components / entities communicate with each other, and an external event system which sends events to / from clients?
+
+
+INetworkListener
+Handles a network listener eg an instance of a websocket server. 
+Handles (de)serialising of game messages from / to the network. 
+
+

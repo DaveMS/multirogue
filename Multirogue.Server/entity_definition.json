@@ -1,0 +1,18 @@
+{
+    "entities": [
+
+        {
+            "entityType": 0,
+            "components": [
+                {
+                    "componentType": "name", 
+                    "name": "Short Sword"
+                },
+                {
+                    
+                }
+            ]
+        }
+
+    ]
+}
